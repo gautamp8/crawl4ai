@@ -1668,29 +1668,21 @@ class AsyncPlaywrightCrawlerStrategy(AsyncCrawlerStrategy):
             viewport_size = page.viewport_size
             viewport_height = viewport_size["height"]
 
-            num_segments = (page_height // viewport_height) + 1
+            # Calculate number of segments needed - avoid duplicates by using ceiling division
+            num_segments = (page_height + viewport_height - 1) // viewport_height
+
             for i in range(num_segments):
                 y_offset = i * viewport_height
-                # Special handling for the last segment
-                if i == num_segments - 1:
-                    last_part_height = page_height % viewport_height
-                    
-                    # If page_height is an exact multiple of viewport_height,
-                    # we don't need an extra segment
-                    if last_part_height == 0:
-                        # Skip last segment if page height is exact multiple of viewport
-                        break
-                    
-                    # Adjust viewport to exactly match the remaining content height
-                    await page.set_viewport_size({"width": page_width, "height": last_part_height})
+
+                # For the last segment, ensure we don't scroll beyond page height
+                if y_offset + viewport_height > page_height:
+                    y_offset = max(0, page_height - viewport_height)
                 
                 await page.evaluate(f"window.scrollTo(0, {y_offset})")
                 await asyncio.sleep(0.01)  # wait for render
                 
                 # Capture the current segment
-                # Note: Using compression options (format, quality) would go here
                 seg_shot = await page.screenshot(full_page=False, type="jpeg", quality=85)
-                # seg_shot = await page.screenshot(full_page=False)
                 img = Image.open(BytesIO(seg_shot)).convert("RGB")
                 segments.append(img)
 
